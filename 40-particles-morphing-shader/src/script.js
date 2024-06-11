@@ -33,14 +33,14 @@ gltfLoader.setDRACOLoader(dracoLoader);
  */
 const sizes = {
   width: window.innerWidth,
-  height: window.innerHeight,
+  height: window.innerHeight + 1,
   pixelRatio: Math.min(window.devicePixelRatio, 2),
 };
 
 window.addEventListener('resize', () => {
   // Update sizes
   sizes.width = window.innerWidth;
-  sizes.height = window.innerHeight;
+  sizes.height = window.innerHeight + 1;
   sizes.pixelRatio = Math.min(window.devicePixelRatio, 2);
 
   if (particles)
