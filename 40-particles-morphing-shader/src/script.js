@@ -11,7 +11,9 @@ import particlesFragmentShader from './shaders/particles/fragment.glsl';
  * Base
  */
 // Debug
-const gui = new GUI({ width: 340 });
+
+let gui;
+if (window.location.hash === '#debug') gui = new GUI({ width: 340 });
 const debugObject = {};
 
 // Canvas
@@ -86,9 +88,10 @@ renderer.setSize(sizes.width, sizes.height);
 renderer.setPixelRatio(sizes.pixelRatio);
 
 debugObject.clearColor = '#160920';
-gui.addColor(debugObject, 'clearColor').onChange(() => {
-  renderer.setClearColor(debugObject.clearColor);
-});
+if (gui)
+  gui.addColor(debugObject, 'clearColor').onChange(() => {
+    renderer.setClearColor(debugObject.clearColor);
+  });
 renderer.setClearColor(debugObject.clearColor);
 let particles = null;
 
@@ -99,6 +102,8 @@ gltfLoader.load('./models.glb', (gltf) => {
    */
 
   particles = {};
+  particles.index = 0;
+
   particles.maxCount = 0; // size of the biggest gltf mesh count
 
   // positions
@@ -134,17 +139,31 @@ gltfLoader.load('./models.glb', (gltf) => {
     }
     particles.positions.push(new THREE.Float32BufferAttribute(newArray, 3));
   }
+
+  // random sizes
+  const sizesArray = new Float32Array(particles.maxCount);
+  for (let i = 0; i < particles.maxCount; i++) {
+    sizesArray[i] = Math.random(); // gives random normalized val
+  }
+
   // Geometry
   particles.geometry = new THREE.BufferGeometry();
-  particles.geometry.setAttribute('position', particles.positions[1]);
-  particles.geometry.setAttribute('aPositionTarget', particles.positions[3]);
+  particles.geometry.setAttribute(
+    'position',
+    particles.positions[particles.index]
+  );
+  particles.geometry.setAttribute(
+    'aSize',
+    new THREE.BufferAttribute(sizesArray, 1)
+  );
 
+  (particles.colorA = '#ff7300'), (particles.colorB = '#0091ff');
   // Material
   particles.material = new THREE.ShaderMaterial({
     vertexShader: particlesVertexShader,
     fragmentShader: particlesFragmentShader,
     uniforms: {
-      uSize: new THREE.Uniform(0.2),
+      uSize: new THREE.Uniform(0.4),
       uResolution: new THREE.Uniform(
         new THREE.Vector2(
           sizes.width * sizes.pixelRatio,
@@ -152,6 +171,8 @@ gltfLoader.load('./models.glb', (gltf) => {
         )
       ),
       uProgress: new THREE.Uniform(0),
+      uColorA: new THREE.Uniform(new THREE.Color(particles.colorA)),
+      uColorB: new THREE.Uniform(new THREE.Color(particles.colorB)),
     },
     blending: THREE.AdditiveBlending,
     depthWrite: false,
@@ -159,23 +180,90 @@ gltfLoader.load('./models.glb', (gltf) => {
 
   // Points
   particles.points = new THREE.Points(particles.geometry, particles.material);
+  particles.points.frustumCulled = false; // only a good solution because it
   scene.add(particles.points);
 
+  //methods
+  particles.morph = (index) => {
+    particles.geometry.attributes.position =
+      particles.positions[particles.index];
+    particles.geometry.attributes.aPositionTarget = particles.positions[index];
+
+    // animate uProgress
+    gsap.fromTo(
+      particles.material.uniforms.uProgress,
+      { value: 0 },
+      { value: 1, duration: 3, ease: 'linear' }
+    );
+
+    // save index
+    particles.index = index;
+  };
+  particles.morph0 = () => {
+    particles.morph(0);
+  };
+  particles.morph1 = () => {
+    particles.morph(1);
+  };
+  particles.morph2 = () => {
+    particles.morph(2);
+  };
+  particles.morph3 = () => {
+    particles.morph(3);
+  };
+
   // tweaks
-  gui
-    .add(particles.material.uniforms.uProgress, 'value')
-    .min(0)
-    .max(1)
-    .step(0.001)
-    .name('uProgress');
+  if (gui) {
+    gui
+      .add(particles.material.uniforms.uProgress, 'value')
+      .min(0)
+      .max(1)
+      .step(0.001)
+      .name('uProgress')
+      .listen();
+
+    gui.add(particles, 'morph0').name('torus');
+    gui.add(particles, 'morph1').name('suzanne');
+    gui.add(particles, 'morph2').name('circle');
+    gui.add(particles, 'morph3').name('text');
+
+    gui.addColor(particles, 'colorA').onChange(() => {
+      particles.material.uniforms.uColorA.value.set(particles.colorA);
+    });
+    gui.addColor(particles, 'colorB').onChange(() => {
+      particles.material.uniforms.uColorB.value.set(particles.colorB);
+    });
+  }
 });
 
 /**
  * Animate
  */
+
+// swap items w/o clicking required
+
+const swapModels = () => {
+  setInterval(() => {
+    if (particles.index >= particles.positions.length - 1) particles.morph(0);
+    else particles.morph(particles.index + 1);
+  }, 4000);
+};
+
+swapModels();
+
+const clock = new THREE.Clock();
 const tick = () => {
   // Update controls
   controls.update();
+  const elapsedTime = clock.getElapsedTime();
+
+  // update materials time
+  if (particles)
+    particles.points.rotation.set(
+      elapsedTime * 0.02,
+      elapsedTime * 0.02,
+      elapsedTime * 0.02
+    );
 
   // Render normal scene
   renderer.render(scene, camera);
